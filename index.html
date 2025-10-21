@@ -1,0 +1,543 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Game Launcher</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Press Start 2P', cursive;
+            background: #0a0a0a;
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            overflow: hidden;
+            position: relative;
+        }
+
+        /* Fondo animado con estrellas mejorado */
+        .stars {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            background: 
+                radial-gradient(circle at 10% 20%, rgba(138, 43, 226, 0.3) 0%, transparent 50%),
+                radial-gradient(circle at 90% 80%, rgba(0, 191, 255, 0.3) 0%, transparent 50%),
+                radial-gradient(circle at 50% 50%, rgba(255, 0, 255, 0.2) 0%, transparent 50%);
+        }
+
+        .star {
+            position: absolute;
+            background: white;
+            border-radius: 50%;
+            animation: twinkle 3s ease-in-out infinite;
+        }
+
+        .star.small {
+            width: 2px;
+            height: 2px;
+            box-shadow: 0 0 3px white;
+        }
+
+        .star.medium {
+            width: 3px;
+            height: 3px;
+            box-shadow: 0 0 5px white, 0 0 10px rgba(255, 255, 255, 0.5);
+        }
+
+        .star.large {
+            width: 4px;
+            height: 4px;
+            box-shadow: 0 0 8px white, 0 0 15px rgba(255, 255, 255, 0.7);
+        }
+
+        @keyframes twinkle {
+            0%, 100% { 
+                opacity: 0.3;
+                transform: scale(1);
+            }
+            50% { 
+                opacity: 1;
+                transform: scale(1.2);
+            }
+        }
+
+        /* Nebulosas de colores */
+        .nebula {
+            position: absolute;
+            border-radius: 50%;
+            filter: blur(60px);
+            opacity: 0.15;
+            animation: nebulaMove 20s ease-in-out infinite;
+        }
+
+        .nebula.purple {
+            width: 400px;
+            height: 400px;
+            background: radial-gradient(circle, #ff00ff, transparent);
+            top: 10%;
+            left: 10%;
+        }
+
+        .nebula.blue {
+            width: 500px;
+            height: 500px;
+            background: radial-gradient(circle, #00ffff, transparent);
+            bottom: 10%;
+            right: 10%;
+            animation-delay: -10s;
+        }
+
+        .nebula.green {
+            width: 350px;
+            height: 350px;
+            background: radial-gradient(circle, #00ff00, transparent);
+            top: 50%;
+            right: 20%;
+            animation-delay: -5s;
+        }
+
+        @keyframes nebulaMove {
+            0%, 100% {
+                transform: translate(0, 0) scale(1);
+            }
+            33% {
+                transform: translate(50px, -30px) scale(1.1);
+            }
+            66% {
+                transform: translate(-30px, 50px) scale(0.9);
+            }
+        }
+
+        /* Pantalla de inicio */
+        .launch-screen {
+            position: relative;
+            z-index: 1;
+            text-align: center;
+            animation: slideIn 0.8s ease-out;
+        }
+
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(-50px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .launch-screen.hide {
+            animation: slideOut 0.8s ease-in forwards;
+        }
+
+        @keyframes slideOut {
+            to {
+                opacity: 0;
+                transform: translateY(50px);
+            }
+        }
+
+        /* Logo del juego */
+        .game-logo-container {
+            margin-bottom: 50px;
+            animation: float 3s ease-in-out infinite;
+        }
+
+        @keyframes float {
+            0%, 100% {
+                transform: translateY(0px);
+            }
+            50% {
+                transform: translateY(-15px);
+            }
+        }
+
+        .game-logo {
+            width: 350px;
+            height: 350px;
+            border: 6px solid #00ff00;
+            border-radius: 20px;
+            box-shadow: 
+                0 0 20px #00ff00,
+                0 0 40px #00ff00,
+                0 0 60px rgba(0, 255, 0, 0.5),
+                inset 0 0 20px rgba(0, 255, 0, 0.2);
+            background: #1a1a1a;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .game-logo img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .game-logo::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
+            animation: shine 3s infinite;
+        }
+
+        @keyframes shine {
+            0% { left: -100%; }
+            50%, 100% { left: 100%; }
+        }
+
+        /* Botón de abrir juego */
+        .open-button {
+            padding: 20px 60px;
+            font-size: 24px;
+            font-family: 'Press Start 2P', cursive;
+            color: #fff;
+            background: linear-gradient(180deg, #ff00ff, #8800ff);
+            border: 4px solid #ff00ff;
+            border-radius: 15px;
+            cursor: pointer;
+            position: relative;
+            box-shadow: 
+                0 0 20px #ff00ff,
+                0 0 40px rgba(255, 0, 255, 0.5),
+                0 8px 0 #660099;
+            transition: all 0.1s ease;
+            text-transform: uppercase;
+        }
+
+        .open-button:hover {
+            box-shadow: 
+                0 0 30px #ff00ff,
+                0 0 60px rgba(255, 0, 255, 0.8),
+                0 8px 0 #660099;
+            transform: scale(1.05);
+        }
+
+        .open-button:active {
+            transform: translateY(4px);
+            box-shadow: 
+                0 0 20px #ff00ff,
+                0 0 40px rgba(255, 0, 255, 0.5),
+                0 4px 0 #660099;
+        }
+
+        .open-button::before {
+            content: '▶ ';
+            animation: blink 1s step-end infinite;
+        }
+
+        @keyframes blink {
+            0%, 50% { opacity: 1; }
+            51%, 100% { opacity: 0; }
+        }
+
+        /* Menú principal del juego */
+        .game-menu {
+            display: none;
+            position: relative;
+            z-index: 1;
+            text-align: center;
+            animation: fadeIn 1s ease-out;
+        }
+
+        .game-menu.show {
+            display: block;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: scale(0.8);
+            }
+            to {
+                opacity: 1;
+                transform: scale(1);
+            }
+        }
+
+        /* Título del juego estilo 8-bit */
+        .game-title {
+            font-size: 48px;
+            color: #00ff00;
+            text-shadow: 
+                4px 4px 0 #008800,
+                8px 8px 0 #004400,
+                0 0 20px #00ff00;
+            margin-bottom: 60px;
+            animation: titleGlow 2s ease-in-out infinite;
+            letter-spacing: 2px;
+        }
+
+        @keyframes titleGlow {
+            0%, 100% {
+                text-shadow: 
+                    4px 4px 0 #008800,
+                    8px 8px 0 #004400,
+                    0 0 20px #00ff00;
+            }
+            50% {
+                text-shadow: 
+                    4px 4px 0 #008800,
+                    8px 8px 0 #004400,
+                    0 0 40px #00ff00,
+                    0 0 60px #00ff00;
+            }
+        }
+
+        /* Menú de opciones */
+        .menu-options {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            align-items: center;
+        }
+
+        .menu-button {
+            padding: 15px 50px;
+            font-size: 20px;
+            font-family: 'Press Start 2P', cursive;
+            color: #fff;
+            background: #00aaff;
+            border: 4px solid #0088cc;
+            border-radius: 10px;
+            cursor: pointer;
+            box-shadow: 
+                0 6px 0 #005588,
+                0 0 20px rgba(0, 170, 255, 0.5);
+            transition: all 0.1s ease;
+            position: relative;
+            text-transform: uppercase;
+            min-width: 300px;
+        }
+
+        .menu-button:hover {
+            background: #00ccff;
+            box-shadow: 
+                0 6px 0 #005588,
+                0 0 30px rgba(0, 170, 255, 0.8);
+            transform: translateY(-2px);
+        }
+
+        .menu-button:active {
+            transform: translateY(4px);
+            box-shadow: 
+                0 2px 0 #005588,
+                0 0 10px rgba(0, 170, 255, 0.5);
+        }
+
+        .menu-button.primary {
+            background: linear-gradient(180deg, #ffff00, #ffaa00);
+            border-color: #ff8800;
+            color: #000;
+            font-weight: bold;
+            animation: pulse 2s ease-in-out infinite;
+        }
+
+        .menu-button.primary:hover {
+            background: linear-gradient(180deg, #ffff44, #ffbb00);
+        }
+
+        @keyframes pulse {
+            0%, 100% {
+                box-shadow: 
+                    0 6px 0 #cc6600,
+                    0 0 20px rgba(255, 170, 0, 0.5);
+            }
+            50% {
+                box-shadow: 
+                    0 6px 0 #cc6600,
+                    0 0 40px rgba(255, 170, 0, 0.9);
+            }
+        }
+
+        /* Decoración de píxeles */
+        .pixel-decoration {
+            position: fixed;
+            width: 20px;
+            height: 20px;
+            background: #00ff00;
+            box-shadow: 0 0 10px #00ff00;
+            animation: pixelFloat 5s ease-in-out infinite;
+        }
+
+        .pixel-decoration:nth-child(1) {
+            top: 10%;
+            left: 10%;
+            animation-delay: 0s;
+        }
+
+        .pixel-decoration:nth-child(2) {
+            top: 20%;
+            right: 10%;
+            animation-delay: 1s;
+            background: #ff00ff;
+            box-shadow: 0 0 10px #ff00ff;
+        }
+
+        .pixel-decoration:nth-child(3) {
+            bottom: 10%;
+            left: 15%;
+            animation-delay: 2s;
+            background: #00ffff;
+            box-shadow: 0 0 10px #00ffff;
+        }
+
+        .pixel-decoration:nth-child(4) {
+            bottom: 20%;
+            right: 15%;
+            animation-delay: 3s;
+            background: #ffff00;
+            box-shadow: 0 0 10px #ffff00;
+        }
+
+        @keyframes pixelFloat {
+            0%, 100% {
+                transform: translateY(0) rotate(0deg);
+            }
+            50% {
+                transform: translateY(-20px) rotate(180deg);
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Estrellas y nebulosas de fondo -->
+    <div class="stars" id="starsContainer"></div>
+    <div class="nebula purple"></div>
+    <div class="nebula blue"></div>
+    <div class="nebula green"></div>
+
+    <!-- Decoraciones de píxeles -->
+    <div class="pixel-decoration"></div>
+    <div class="pixel-decoration"></div>
+    <div class="pixel-decoration"></div>
+    <div class="pixel-decoration"></div>
+
+    <!-- Pantalla de inicio -->
+    <div class="launch-screen" id="launchScreen">
+        <div class="game-logo-container">
+            <div class="game-logo">
+                <img src="img/logo.jpg" alt="Game Logo" onerror="this.src='data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22350%22 height=%22350%22%3E%3Crect fill=%22%231a1a1a%22 width=%22350%22 height=%22350%22/%3E%3Ctext x=%2250%25%22 y=%2250%25%22 font-size=%2280%22 text-anchor=%22middle%22 dy=%22.3em%22 fill=%22%2300ff00%22%3E🎮%3C/text%3E%3C/svg%3E'">
+            </div>
+        </div>
+
+        <button class="open-button" id="openButton">
+            Abrir Juego
+        </button>
+    </div>
+
+    <!-- Menú del juego -->
+    <div class="game-menu" id="gameMenu">
+        <h1 class="game-title">MEGA GAME<br>creador - King Tony</h1>
+
+        <div class="menu-options">
+            <button class="menu-button primary" onclick="window.location.href='juego.html'">
+                ▶ JUGAR SOLO
+            </button>
+            <button class="menu-button" onclick="window.location.href='juego.html'">
+                👥 JUGAR ENTRE DOS
+            </button>
+            <button class="menu-button" id="musicToggle">
+                ♪ APAGAR MÚSICA
+            </button>
+            <button class="menu-button">
+                ℹ CRÉDITOS
+            </button>
+        </div>
+    </div>
+
+    <!-- Audio de fondo -->
+    <audio id="backgroundMusic" loop>
+        <source src="music/fondo.mp3" type="audio/mpeg">
+    </audio>
+
+    <script>
+        // Crear estrellas dinámicamente
+        const starsContainer = document.getElementById('starsContainer');
+        for (let i = 0; i < 100; i++) {
+            const star = document.createElement('div');
+            star.className = 'star';
+            
+            // Diferentes tamaños de estrellas
+            const size = Math.random();
+            if (size < 0.5) {
+                star.classList.add('small');
+            } else if (size < 0.8) {
+                star.classList.add('medium');
+            } else {
+                star.classList.add('large');
+            }
+            
+            star.style.left = Math.random() * 100 + '%';
+            star.style.top = Math.random() * 100 + '%';
+            star.style.animationDelay = Math.random() * 3 + 's';
+            star.style.animationDuration = (Math.random() * 2 + 2) + 's';
+            
+            starsContainer.appendChild(star);
+        }
+
+        const openButton = document.getElementById('openButton');
+        const launchScreen = document.getElementById('launchScreen');
+        const gameMenu = document.getElementById('gameMenu');
+        const music = document.getElementById('backgroundMusic');
+        const musicToggle = document.getElementById('musicToggle');
+        let musicPlaying = false;
+
+        openButton.addEventListener('click', function() {
+            // Reproducir música
+            music.play().then(() => {
+                musicPlaying = true;
+            }).catch(e => {
+                console.log('Error al reproducir música:', e);
+            });
+
+            // Ocultar pantalla de inicio
+            launchScreen.classList.add('hide');
+
+            // Mostrar menú del juego después de la animación
+            setTimeout(() => {
+                launchScreen.style.display = 'none';
+                gameMenu.classList.add('show');
+            }, 800);
+        });
+
+        // Toggle de música en el menú
+        musicToggle.addEventListener('click', function() {
+            if (musicPlaying) {
+                music.pause();
+                this.textContent = '♪ ENCENDER MÚSICA';
+                musicPlaying = false;
+            } else {
+                music.play().catch(e => console.log('Error:', e));
+                this.textContent = '♪ APAGAR MÚSICA';
+                musicPlaying = true;
+            }
+        });
+
+        // Sonido de selección al pasar por los botones del menú
+        const menuButtons = document.querySelectorAll('.menu-button');
+        menuButtons.forEach(button => {
+            button.addEventListener('mouseenter', function() {
+                // Aquí puedes agregar un efecto de sonido si quieres
+            });
+        });
+    </script>
+</body>
+</html>
