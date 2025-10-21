@@ -59,7 +59,7 @@
             text-transform: uppercase;
             z-index: 10;
         }
-        #menu, #countdown, #roomMenu {
+        #menu, #countdown {
             position: fixed;
             top: 0;
             left: 0;
@@ -74,9 +74,6 @@
             font-family: "Open Sans", sans-serif;
             color: #7beeff;
         }
-        #roomMenu {
-            display: none;
-        }
         #countdown {
             display: none;
         }
@@ -85,7 +82,7 @@
             font-weight: 600;
             text-transform: uppercase;
         }
-        #menu h1, #roomMenu h1 {
+        #menu h1 {
             font-size: 2em;
             margin-bottom: 20px;
         }
@@ -99,14 +96,6 @@
             cursor: pointer;
             font-family: "Open Sans", sans-serif;
         }
-        #closeRoom {
-            background: #ff3434;
-        }
-        #roomCode {
-            font-size: 1.5em;
-            margin: 10px;
-            color: #ff3434;
-        }
     </style>
 </head>
 <body>
@@ -118,11 +107,6 @@
         <h1>Elige Jugador</h1>
         <button id="player1">Jugador 1</button>
         <button id="player2">Jugador 2</button>
-    </div>
-    <div id="roomMenu">
-        <h1 id="roomTitle">Sala Creada</h1>
-        <div id="roomCode"></div>
-        <button id="closeRoom">Cerrar Sala</button>
     </div>
     <div id="countdown">
         <h1 id="countText">3</h1>
@@ -275,7 +259,7 @@
         import gsap from "https://esm.sh/gsap";
         import { Reflector } from "https://esm.sh/three@0.156.1/examples/jsm/objects/Reflector";
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.1/firebase-app.js";
-        import { getDatabase, ref, set, onValue, remove, get, query, orderByChild, limitToFirst } from "https://www.gstatic.com/firebasejs/10.13.1/firebase-database.js";
+        import { getDatabase, ref, set, onValue, get } from "https://www.gstatic.com/firebasejs/10.13.1/firebase-database.js";
 
         const firebaseConfig = {
           apiKey: "AIzaSyCmwOvmF0dyDsWgzns1RfNUXb_kXMa_iGM",
@@ -290,22 +274,11 @@
         const app = initializeApp(firebaseConfig);
         const db = getDatabase(app);
 
-        function generateUUID() {
-            return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
-                var r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
-                return v.toString(16);
-            });
-        }
-
         document.addEventListener("DOMContentLoaded", () => new App());
 
         class App {
             constructor() {
                 this.db = db;
-                this.userId = localStorage.getItem('userId') || generateUUID();
-                localStorage.setItem('userId', this.userId);
-                this.currentRoomId = null;
-                this.isHost = false;
                 this.winWidth = window.innerWidth;
                 this.winHeight = window.innerHeight;
                 this.gltfFile = "https://assets.codepen.io/264161/rabbit6.glb";
@@ -325,161 +298,100 @@
                 this.carrotSound = document.getElementById('carrotSound');
                 this.backgroundMusic = document.getElementById('backgroundMusic');
                 this.menu = document.getElementById('menu');
-                this.roomMenu = document.getElementById('roomMenu');
                 this.countdown = document.getElementById('countdown');
                 this.countText = document.getElementById('countText');
-                this.roomCodeEl = document.getElementById('roomCode');
-                this.roomTitleEl = document.getElementById('roomTitle');
                 this.isUncontrolled = false;
                 this.uncontrolledEndTime = 0;
                 this.nextSkullSpawn = Date.now() / 1000 + 2;
                 this.isExploding = false;
                 this.lastSync = 0;
-                this.flashEvents = [];
                 this.initGame();
                 this.setupListeners();
                 document.getElementById('player1').addEventListener('click', () => this.selectPlayer(1));
                 document.getElementById('player2').addEventListener('click', () => this.selectPlayer(2));
-                document.getElementById('closeRoom').addEventListener('click', () => this.closeRoom());
                 this.loadAssets();
             }
 
             initGame() {
-                // Clean old rooms if needed, but for now, no
+                set(ref(this.db, 'game/players'), {
+                    1: {chosen: false, position:{x:0,y:0,z:0}, rotation:{x:0,y:0,z:0}, score:0, level:1},
+                    2: {chosen: false, position:{x:0,y:0,z:0}, rotation:{x:0,y:0,z:0}, score:0, level:1}
+                });
+                set(ref(this.db, 'game/shared'), {
+                    carrot: {position:{x:0,y:0,z:0}, visible: false, targetY:0},
+                    skull: {position:{x:0,y:0,z:0}, visible: false, targetY:0},
+                    nextSkullSpawn: Date.now() / 1000 + 2,
+                    started: false,
+                    countdown: null
+                });
             }
 
             setupListeners() {
-                // Global listeners for rooms
-                onValue(ref(this.db, 'rooms'), (snap) => {
-                    // This can be used if needed for listing, but for now, not
+                // Listen for player choices to hide buttons
+                onValue(ref(this.db, 'game/players'), (snap) => {
+                    const data = snap.val() || {};
+                    const p1Btn = document.getElementById('player1');
+                    const p2Btn = document.getElementById('player2');
+                    if (data[1]?.chosen) p1Btn.style.display = 'none';
+                    if (data[2]?.chosen) p2Btn.style.display = 'none';
+                });
+
+                // Listen for countdown
+                onValue(ref(this.db, 'game/shared/countdown'), (snap) => {
+                    const val = snap.val();
+                    if (val !== null) {
+                        this.menu.style.display = 'none';
+                        this.countdown.style.display = 'flex';
+                        if (val > 0) {
+                            this.countText.textContent = val;
+                        } else if (val === 0) {
+                            this.countText.textContent = '¡GO!';
+                            setTimeout(() => {
+                                this.countdown.style.display = 'none';
+                                if (this.playerId) this.startGame();
+                            }, 1000);
+                        }
+                    }
+                });
+
+                // Listen for nextSkullSpawn
+                onValue(ref(this.db, 'game/shared/nextSkullSpawn'), (snap) => {
+                    this.nextSkullSpawn = snap.val() || 0;
                 });
             }
 
             selectPlayer(player) {
-                if (player === 1) {
-                    // Create new room
-                    this.currentRoomId = generateUUID();
-                    this.isHost = true;
-                    set(ref(this.db, `rooms/${this.currentRoomId}`), {
-                        hostUserId: this.userId,
-                        players: {
-                            1: {userId: this.userId, chosen: true, score: 0, level: 1, position: {x:0, y:0, z:0}, rotation: {x:0, y:0, z:0}},
-                            2: {userId: null, chosen: false, score: 0, level: 1, position: {x:0, y:0, z:0}, rotation: {x:0, y:0, z:0}}
-                        },
-                        shared: {
-                            carrot: {position:{x:0,y:0,z:0}, visible: false, targetY:0},
-                            skull: {position:{x:0,y:0,z:0}, visible: false, targetY:0},
-                            nextSkullSpawn: Date.now() / 1000 + 2,
-                            started: false,
-                            countdown: null,
-                            events: []
-                        }
-                    });
-                    this.playerId = 1;
-                    this.showRoomMenu('Sala Creada - Código: ' + this.currentRoomId.substring(0,8), this.currentRoomId.substring(0,8));
-                    this.joinRoom();
-                } else {
-                    // Find first open room for player 2
-                    get(query(ref(this.db, 'rooms'), orderByChild('players/2/userId'), limitToFirst(1))).then((snap) => {
-                        let roomFound = null;
-                        snap.forEach((child) => {
-                            if (child.val().players[2].userId === null) {
-                                roomFound = child.key;
-                            }
-                        });
-                        if (roomFound) {
-                            this.currentRoomId = roomFound;
-                            this.isHost = false;
-                            set(ref(this.db, `rooms/${this.currentRoomId}/players/2/userId`), this.userId);
-                            set(ref(this.db, `rooms/${this.currentRoomId}/players/2/chosen`), true);
-                            this.playerId = 2;
-                            this.joinRoom();
-                        } else {
-                            // No open room, perhaps show message or create new, but per user, create new as player1? Wait, for player2, maybe alert no room
-                            alert('No hay salas disponibles para Jugador 2. Elige Jugador 1 para crear una.');
-                            return;
-                        }
-                    });
-                }
-            }
-
-            showRoomMenu(title, code) {
-                this.menu.style.display = 'none';
-                this.roomMenu.style.display = 'flex';
-                this.roomTitleEl.textContent = title;
-                this.roomCodeEl.textContent = code;
-                if (!this.isHost) {
-                    this.roomMenu.style.display = 'none'; // Hide for non-host
-                }
-            }
-
-            joinRoom() {
-                // Listen to room data
-                this.roomRef = ref(this.db, `rooms/${this.currentRoomId}`);
-                onValue(this.roomRef, (snap) => {
+                this.playerId = player;
+                set(ref(this.db, `game/players/${player}/chosen`), true);
+                get(ref(this.db, 'game')).then((snap) => {
                     const data = snap.val();
-                    if (!data) {
-                        // Room closed
-                        this.handleRoomClosed();
-                        return;
+                    const p1 = data.players?.[1]?.chosen || false;
+                    const p2 = data.players?.[2]?.chosen || false;
+                    const shared = data.shared || {};
+                    if (p1 && p2 && !shared.started) {
+                        this.startSharedCountdown();
+                    } else if (p1 && p2) {
+                        this.startGame();
                     }
-                    const players = data.players;
-                    const shared = data.shared;
-                    if (players[this.playerId].userId !== this.userId) {
-                        // Kicked or something, reset
-                        this.resetToMenu();
-                        return;
-                    }
-                    this.score = players[this.playerId].score;
-                    this.level = players[this.playerId].level;
-                    this.updateScore();
-                    // Handle countdown
-                    const countdown = shared.countdown;
-                    if (countdown !== null && this.gameState === 'menu') {
-                        this.menu.style.display = 'none';
-                        this.roomMenu.style.display = 'none';
-                        this.countdown.style.display = 'flex';
-                        if (countdown > 0) {
-                            this.countText.textContent = countdown;
-                        } else if (countdown === 0) {
-                            this.countText.textContent = '¡GO!';
-                            setTimeout(() => {
-                                this.countdown.style.display = 'none';
-                                this.startGame();
-                            }, 1000);
-                        }
-                    }
-                    // Handle events
-                    if (shared.events) {
-                        this.flashEvents = shared.events.filter(e => Date.now() / 1000 - e.timestamp < 2); // Keep recent
-                        shared.events = this.flashEvents; // Trim old
-                    }
-                    // Check if both chosen and not started
-                    if (players[1].chosen && players[2].chosen && !shared.started && (this.isHost || true)) { // Host starts
-                        if (this.isHost) {
-                            this.startSharedCountdown();
-                        }
-                    }
-                    this.nextSkullSpawn = shared.nextSkullSpawn || this.nextSkullSpawn;
                 });
             }
 
             startSharedCountdown() {
-                set(ref(this.db, `rooms/${this.currentRoomId}/shared/countdown`), 3);
                 this.countdown.style.display = 'flex';
+                set(ref(this.db, 'game/shared/countdown'), 3);
                 this.countText.textContent = '3';
                 setTimeout(() => {
-                    set(ref(this.db, `rooms/${this.currentRoomId}/shared/countdown`), 2);
+                    set(ref(this.db, 'game/shared/countdown'), 2);
                     this.countText.textContent = '2';
                     setTimeout(() => {
-                        set(ref(this.db, `rooms/${this.currentRoomId}/shared/countdown`), 1);
+                        set(ref(this.db, 'game/shared/countdown'), 1);
                         this.countText.textContent = '1';
                         setTimeout(() => {
-                            set(ref(this.db, `rooms/${this.currentRoomId}/shared/countdown`), 0);
+                            set(ref(this.db, 'game/shared/countdown'), 0);
                             this.countText.textContent = '¡GO!';
                             setTimeout(() => {
-                                set(ref(this.db, `rooms/${this.currentRoomId}/shared/started`), true);
-                                set(ref(this.db, `rooms/${this.currentRoomId}/shared/countdown`), null);
+                                set(ref(this.db, 'game/shared/started'), true);
+                                set(ref(this.db, 'game/shared/countdown'), null);
                                 this.countdown.style.display = 'none';
                                 this.spawnCarrot();
                                 this.startGame();
@@ -487,31 +399,6 @@
                         }, 1000);
                     }, 1000);
                 }, 1000);
-            }
-
-            closeRoom() {
-                if (this.isHost) {
-                    remove(ref(this.db, `rooms/${this.currentRoomId}`));
-                    this.resetToMenu();
-                }
-            }
-
-            handleRoomClosed() {
-                alert('Sala terminada');
-                this.resetToMenu();
-            }
-
-            resetToMenu() {
-                this.gameState = 'menu';
-                this.currentRoomId = null;
-                this.playerId = null;
-                this.isHost = false;
-                this.menu.style.display = 'flex';
-                this.roomMenu.style.display = 'none';
-                this.countdown.style.display = 'none';
-                if (this.scene) {
-                    // Clean scene if needed
-                }
             }
 
             startGame() {
@@ -616,6 +503,7 @@
                 // Core
                 this.createRenderer();
                 this.createSim();
+                //this.createControls();
                 this.createListeners();
                 // Environment
                 this.floorSize = 30;
@@ -626,116 +514,19 @@
                 this.createLight();
                 this.createParticles();
                 this.updateScore();
-                // Set up room listeners
-                this.setupRoomListeners();
+                // Set up Firebase listeners for shared objects and other player
+                this.setupRealtimeListeners();
                 // Render loop
                 this.draw();
-            }
-
-            setupRoomListeners() {
-                const otherId = 3 - this.playerId;
-                // Listen for other player position/rotation
-                onValue(ref(this.db, `rooms/${this.currentRoomId}/players/${otherId}`), (snap) => {
-                    const data = snap.val();
-                    if (data && this.otherRabbit) {
-                        this.otherRabbit.position.set(data.position?.x || 0, data.position?.y || 0, data.position?.z || 0);
-                        this.otherRabbit.rotation.set(data.rotation?.x || 0, data.rotation?.y || 0, data.rotation?.z || 0);
-                    }
-                });
-
-                // Listen for own score/level
-                onValue(ref(this.db, `rooms/${this.currentRoomId}/players/${this.playerId}`), (snap) => {
-                    const data = snap.val();
-                    if (data && data.userId === this.userId) {
-                        this.score = data.score || 0;
-                        this.level = data.level || 1;
-                        this.updateScore();
-                    }
-                });
-
-                // Listen for carrot
-                onValue(ref(this.db, `rooms/${this.currentRoomId}/shared/carrot`), (snap) => {
-                    const data = snap.val();
-                    if (data && this.carrot) {
-                        this.carrot.position.set(data.position?.x || 0, data.position?.y || 0, data.position?.z || 0);
-                        const wasVisible = this.carrot.visible;
-                        this.carrot.visible = data.visible || false;
-                        if (data.visible && !wasVisible && data.position?.y === -1 && data.targetY !== undefined) {
-                            this.carrot.scale.set(0, 0, 0);
-                            gsap.to(this.carrot.scale, { duration: 1.5, ease: "elastic.out", x: 1, y: 1, z: 1 });
-                            gsap.to(this.carrot.position, { duration: 1.5, ease: "elastic.out", y: data.targetY });
-                        }
-                    }
-                });
-
-                // Listen for skull
-                onValue(ref(this.db, `rooms/${this.currentRoomId}/shared/skull`), (snap) => {
-                    const data = snap.val();
-                    if (data && this.skull) {
-                        this.skull.position.set(data.position?.x || 0, data.position?.y || 0, data.position?.z || 0);
-                        const wasVisible = this.skull.visible;
-                        this.skull.visible = data.visible || false;
-                        if (data.visible && !wasVisible && data.position?.y === -1 && data.targetY !== undefined) {
-                            this.skull.scale.set(0, 0, 0);
-                            gsap.to(this.skull.scale, { duration: 1.5, ease: "elastic.out", x: 1, y: 1, z: 1 });
-                            gsap.to(this.skull.position, { duration: 1.5, ease: "elastic.out", y: data.targetY });
-                        }
-                    }
-                });
-
-                // Listen for events
-                onValue(ref(this.db, `rooms/${this.currentRoomId}/shared/events`), (snap) => {
-                    const events = snap.val() || [];
-                    this.processFlashEvents(events);
-                });
-            }
-
-            processFlashEvents(events) {
-                events.forEach(event => {
-                    if (Date.now() / 1000 - event.timestamp < 2) {
-                        if (event.type === 'flashYellow' && event.player !== undefined) {
-                            this.flashRabbit(event.player, 'yellow');
-                        } else if (event.type === 'flashGreen' && event.player !== undefined) {
-                            this.flashRabbit(event.player, 'green');
-                        }
-                    }
-                });
-            }
-
-            flashRabbit(playerNum, colorType) {
-                const rabbit = playerNum === 1 ? this.rabbit1 : this.rabbit2;
-                if (!rabbit) return;
-                const primMat = playerNum === 1 ? this.primMat1 : this.primMat2;
-                const normalColor = playerNum === 1 ? { r: 123/255, g: 238/255, b: 255/255 } : { r: 1, g: 0.2, b: 0.2 };
-                const flashColor = colorType === 'yellow' ? { r: 1, g: 1, b: 0 } : { r: 0, g: 1, b: 0 };
-                primMat.color.setRGB(flashColor.r, flashColor.g, flashColor.b);
-                const tl = gsap.timeline({
-                    onComplete: () => {
-                        primMat.color.setRGB(normalColor.r, normalColor.g, normalColor.b);
-                    }
-                });
-                const repeat = colorType === 'yellow' ? 3 : 5;
-                const duration = colorType === 'yellow' ? 0.7 : 1.5;
-                tl.to({}, {duration: duration});
-                tl.to(primMat.color, {
-                    r: normalColor.r,
-                    g: normalColor.g,
-                    b: normalColor.b,
-                    duration: 0.1,
-                    repeat: repeat,
-                    yoyo: true,
-                    ease: "none"
-                });
             }
 
             processModels() {
                 const gltf = this.baseGltf;
                 // Player 1
-                this.rabbit1 = gltf.scene.clone();
-                const rabbit1Obj = this.rabbit1.getObjectByName("Rabbit");
-                this.applyMaterials(rabbit1Obj, this.primMat1, this.secMat1);
-                this.addOutlines(rabbit1Obj);
-                rabbit1Obj.traverse((object) => {
+                this.rabbit1 = gltf.scene.getObjectByName("Rabbit").clone();
+                this.applyMaterials(this.rabbit1, this.primMat1, this.secMat1);
+                this.addOutlines(this.rabbit1);
+                this.rabbit1.traverse((object) => {
                     if (object.isMesh) {
                         object.castShadow = true;
                         object.receiveShadow = true;
@@ -744,11 +535,10 @@
                 this.scene.add(this.rabbit1);
 
                 // Player 2
-                this.rabbit2 = gltf.scene.clone();
-                const rabbit2Obj = this.rabbit2.getObjectByName("Rabbit");
-                this.applyMaterials(rabbit2Obj, this.primMat2, this.secMat2);
-                this.addOutlines(rabbit2Obj);
-                rabbit2Obj.traverse((object) => {
+                this.rabbit2 = gltf.scene.getObjectByName("Rabbit").clone();
+                this.applyMaterials(this.rabbit2, this.primMat2, this.secMat2);
+                this.addOutlines(this.rabbit2);
+                this.rabbit2.traverse((object) => {
                     if (object.isMesh) {
                         object.castShadow = true;
                         object.receiveShadow = true;
@@ -757,13 +547,13 @@
                 this.scene.add(this.rabbit2);
 
                 // Set controlled rabbit
-                this.rabbit = this.playerId === 1 ? this.rabbit1.getObjectByName("Rabbit") : this.rabbit2.getObjectByName("Rabbit");
-                this.otherRabbit = this.playerId === 1 ? this.rabbit2.getObjectByName("Rabbit") : this.rabbit1.getObjectByName("Rabbit");
+                this.rabbit = this.playerId === 1 ? this.rabbit1 : this.rabbit2;
+                this.otherRabbit = this.playerId === 1 ? this.rabbit2 : this.rabbit1;
                 this.rabbitBody = this.rabbit.getObjectByName("body");
                 this.earLeft = this.rabbit.getObjectByName("earLeft");
                 this.earRight = this.rabbit.getObjectByName("earRight");
 
-                // Carrot from gltf
+                // Carrot
                 this.carrot = gltf.scene.getObjectByName("carrot").clone();
                 this.carrot.traverse((object) => {
                     if (object.isMesh) {
@@ -771,7 +561,7 @@
                         object.castShadow = true;
                     }
                 });
-                this.addOutline(this.carrot.getObjectByName("carrot")); // Assuming carrot has name
+                this.addOutline(this.carrot);
                 this.carrot.rotation.z = 0.2;
                 this.carrot.rotation.x = 0.2;
                 this.scene.add(this.carrot);
@@ -798,7 +588,48 @@
                 this.scene.add(this.skull);
             }
 
+            setupRealtimeListeners() {
+                const otherId = 3 - this.playerId;
+                // Listen for other player
+                onValue(ref(this.db, `game/players/${otherId}`), (snap) => {
+                    const data = snap.val();
+                    if (data && this.otherRabbit) {
+                        this.otherRabbit.position.set(data.position?.x || 0, data.position?.y || 0, data.position?.z || 0);
+                        this.otherRabbit.rotation.set(data.rotation?.x || 0, data.rotation?.y || 0, data.rotation?.z || 0);
+                    }
+                });
+
+                // Listen for carrot
+                onValue(ref(this.db, 'game/shared/carrot'), (snap) => {
+                    const data = snap.val();
+                    if (data) {
+                        this.carrot.position.set(data.position?.x || 0, data.position?.y || 0, data.position?.z || 0);
+                        this.carrot.visible = data.visible || false;
+                        if (data.visible && data.position?.y === -1 && data.targetY !== undefined) {
+                            this.carrot.scale.set(0, 0, 0);
+                            gsap.to(this.carrot.scale, { duration: 1.5, ease: "elastic.out", x: 1, y: 1, z: 1 });
+                            gsap.to(this.carrot.position, { duration: 1.5, ease: "elastic.out", y: data.targetY });
+                        }
+                    }
+                });
+
+                // Listen for skull
+                onValue(ref(this.db, 'game/shared/skull'), (snap) => {
+                    const data = snap.val();
+                    if (data) {
+                        this.skull.position.set(data.position?.x || 0, data.position?.y || 0, data.position?.z || 0);
+                        this.skull.visible = data.visible || false;
+                        if (data.visible && data.position?.y === -1 && data.targetY !== undefined) {
+                            this.skull.scale.set(0, 0, 0);
+                            gsap.to(this.skull.scale, { duration: 1.5, ease: "elastic.out", x: 1, y: 1, z: 1 });
+                            gsap.to(this.skull.position, { duration: 1.5, ease: "elastic.out", y: data.targetY });
+                        }
+                    }
+                });
+            }
+
             createFloor() {
+                     
                 this.floor = new Reflector(
                     new THREE.PlaneGeometry(this.floorSize, this.floorSize),
                     {
@@ -867,6 +698,8 @@
                 this.light.shadow.radius = 3;
                 this.light.shadow.blurSamples = 4;
                 this.scene.add(this.light);
+                const helper = new THREE.CameraHelper(this.light.shadow.camera);
+                //this.scene.add(helper);
             }
             createRenderer() {
                 const canvas = document.querySelector("canvas.webgl");
@@ -927,6 +760,12 @@
                 })
             }
          
+            createControls() {
+                this.controls = new OrbitControls(this.camera, this.renderer.domElement);
+                this.controls.minDistance = 0;
+                this.controls.maxDistance = 20;
+                this.controls.enabled = true;
+            }
             createListeners() {
                 window.addEventListener("resize", this.onWindowResize.bind(this));
                 document.addEventListener("mousemove", this.onMouseMove.bind(this), false);
@@ -936,6 +775,7 @@
             draw() {
                 this.updateGame();
                 this.renderer.render(this.scene, this.camera);
+                if (this.controls) this.controls.update();
                 window.requestAnimationFrame(this.draw.bind(this));
             }
             updateGame() {
@@ -947,17 +787,19 @@
                     if (!this.skull.visible && currentTime > this.nextSkullSpawn) {
                         this.spawnSkull();
                         const newNext = currentTime + 3 + Math.random() * 5;
-                        set(ref(this.db, `rooms/${this.currentRoomId}/shared/nextSkullSpawn`), newNext);
+                        set(ref(this.db, 'game/shared/nextSkullSpawn'), newNext);
                     }
                     if (this.isUncontrolled && this.time < this.uncontrolledEndTime) {
+                        // Lose control: no acceleration, but keep moving with friction
                         this.targetHeroUVPos.copy(this.heroNewUVPos);
-                        this.heroSpeed.x *= 0.98;
+                        this.heroSpeed.x *= 0.98; // Slight friction
                         this.heroSpeed.y *= 0.98;
                         this.rabbit.position.x += this.heroSpeed.x * this.dt;
                         this.rabbit.position.z += this.heroSpeed.y * this.dt;
                     } else if (this.isUncontrolled) {
                         this.isUncontrolled = false;
                     } else {
+                        // Normal control
                         let accelMultiplier = 0.5 / this.level;
                         let constrainUVPosX = this.constrain(this.targetHeroUVPos.x - 0.5, -0.3, 0.3);
                         let constrainUVPosY = this.constrain(this.targetHeroUVPos.y - 0.5, -0.3, 0.3);
@@ -1018,12 +860,12 @@
                     // Sync position and rotation
                     const now = Date.now();
                     if (now - this.lastSync > 50) {
-                        set(ref(this.db, `rooms/${this.currentRoomId}/players/${this.playerId}/position`), {
+                        set(ref(this.db, `game/players/${this.playerId}/position`), {
                             x: this.rabbit.position.x,
                             y: this.rabbit.position.y,
                             z: this.rabbit.position.z
                         });
-                        set(ref(this.db, `rooms/${this.currentRoomId}/players/${this.playerId}/rotation`), {
+                        set(ref(this.db, `game/players/${this.playerId}/rotation`), {
                             x: this.rabbit.rotation.x,
                             y: this.rabbit.rotation.y,
                             z: this.rabbit.rotation.z
@@ -1139,21 +981,13 @@
                 let l = distVec.length();
                 if (l <= 1 && this.carrot.visible){
                     this.carrotSound.play().catch(e => console.log('Error al reproducir sonido:', e));
-                    set(ref(this.db, `rooms/${this.currentRoomId}/shared/carrot`), {visible: false});
-                    const newScore = this.score + 1;
-                    const newLevel = this.level + (newScore % 5 === 0 ? 1 : 0);
-                    set(ref(this.db, `rooms/${this.currentRoomId}/players/${this.playerId}`), {
-                        ... (await get(ref(this.db, `rooms/${this.currentRoomId}/players/${this.playerId}`)).val()),
-                        score: newScore,
-                        level: newLevel
-                    });
-                    // Add event for flash
-                    const eventsRef = ref(this.db, `rooms/${this.currentRoomId}/shared/events`);
-                    get(eventsRef).then((snap) => {
-                        const events = snap.val() || [];
-                        events.push({type: 'flashYellow', player: this.playerId, timestamp: Date.now() / 1000});
-                        set(eventsRef, events);
-                    });
+                    set(ref(this.db, 'game/shared/carrot'), {visible: false});
+                    this.score++;
+                    if (this.score % 5 === 0) {
+                        this.level++;
+                    }
+                    this.updateScore();
+                    this.flashYellow();
                     const pos = this.carrot.position.clone();
                     this.explode(pos);
                 }
@@ -1162,17 +996,56 @@
                 distVecSkull.sub(this.skull.position);
                 let lSkull = distVecSkull.length();
                 if (lSkull <= 1 && this.skull.visible){
-                    set(ref(this.db, `rooms/${this.currentRoomId}/shared/skull`), {visible: false});
-                    this.isUncontrolled = true;
-                    this.uncontrolledEndTime = this.time + 2;
-                    // Add event for flash
-                    const eventsRef = ref(this.db, `rooms/${this.currentRoomId}/shared/events`);
-                    get(eventsRef).then((snap) => {
-                        const events = snap.val() || [];
-                        events.push({type: 'flashGreen', player: this.playerId, timestamp: Date.now() / 1000});
-                        set(eventsRef, events);
-                    });
+                    set(ref(this.db, 'game/shared/skull'), {visible: false});
+                    this.flashGreenAndUncontrol();
                 }
+            }
+
+            flashYellow() {
+                const normalColor = { r: this.playerId === 1 ? 123/255 : 1, g: this.playerId === 1 ? 238/255 : 0.2, b: this.playerId === 1 ? 255/255 : 0.2 };
+                const yellowColor = { r: 1, g: 1, b: 0 };
+                const primMat = this.playerId === 1 ? this.primMat1 : this.primMat2;
+                primMat.color.setRGB(1,1,0);
+                const tl = gsap.timeline({
+                    onComplete: () => {
+                        primMat.color.setRGB(normalColor.r, normalColor.g, normalColor.b);
+                    }
+                });
+                tl.to({}, {duration: 0.7});
+                tl.to(primMat.color, {
+                    r: normalColor.r,
+                    g: normalColor.g,
+                    b: normalColor.b,
+                    duration: 0.1,
+                    repeat: 3,
+                    yoyo: true,
+                    ease: "none"
+                });
+            }
+
+            flashGreenAndUncontrol() {
+                const normalColor = { r: this.playerId === 1 ? 123/255 : 1, g: this.playerId === 1 ? 238/255 : 0.2, b: this.playerId === 1 ? 255/255 : 0.2 };
+                const greenColor = { r: 0, g: 1, b: 0 };
+                const primMat = this.playerId === 1 ? this.primMat1 : this.primMat2;
+                primMat.color.setRGB(0,1,0);
+                this.isUncontrolled = true;
+                this.uncontrolledEndTime = this.time + 2;
+                const tl = gsap.timeline({
+                    onComplete: () => {
+                        this.isUncontrolled = false;
+                        primMat.color.setRGB(normalColor.r, normalColor.g, normalColor.b);
+                    }
+                });
+                tl.to({}, {duration: 1.5});
+                tl.to(primMat.color, {
+                    r: normalColor.r,
+                    g: normalColor.g,
+                    b: normalColor.b,
+                    duration: 0.1,
+                    repeat: 5,
+                    yoyo: true,
+                    ease: "none"
+                });
             }
          
             explode(pos){
@@ -1184,7 +1057,9 @@
                 let totalParticles = p1Count + p2Count;
                 for ( i=0; i< p1Count; i++){
                     let m = this.particles1[i];
-                    m.position.copy(pos);
+                    m.position.x = pos.x;
+                    m.position.y = pos.y;
+                    m.position.z = pos.z;
                     m.scale.set(2,2,2);
                     gsap.to(m.position, {
                         x: pos.x + (-.5 + Math.random()) * 1.5,
@@ -1199,7 +1074,7 @@
                         z:0,
                         duration : 1,
                         ease: "power4.out",
-                        onComplete: () => {
+                        onComplete: ()=>{
                             completeCount++;
                             if (completeCount >= totalParticles) {
                                 this.spawnCarrot();
@@ -1210,7 +1085,9 @@
                 }
                 for ( i=0; i< p2Count; i++){
                     let m = this.particles2[i];
-                    m.position.copy(pos);
+                    m.position.x = pos.x;
+                    m.position.y = pos.y;
+                    m.position.z = pos.z;
                     m.scale.set(2,2,2);
                     gsap.to(m.position, {
                         x: pos.x + (-.5 + Math.random()) * 1.5,
@@ -1225,7 +1102,7 @@
                         z:0,
                         duration : 1,
                         ease: "power4.out",
-                        onComplete: () => {
+                        onComplete: ()=>{
                             completeCount++;
                             if (completeCount >= totalParticles) {
                                 this.spawnCarrot();
@@ -1241,7 +1118,7 @@
                 let px = (Math.random() - 0.5) * 2 * maxOffset;
                 let pz = (Math.random() - 0.5) * 2 * maxOffset;
                 let h = .2 + Math.random() * 1;
-                set(ref(this.db, `rooms/${this.currentRoomId}/shared/carrot`), {
+                set(ref(this.db, 'game/shared/carrot'), {
                     position: {x: px, y: -1, z: pz},
                     visible: true,
                     targetY: h
@@ -1253,7 +1130,7 @@
                 let px = (Math.random() - 0.5) * 2 * maxOffset;
                 let pz = (Math.random() - 0.5) * 2 * maxOffset;
                 let h = 0.2 + Math.random();
-                set(ref(this.db, `rooms/${this.currentRoomId}/shared/skull`), {
+                set(ref(this.db, 'game/shared/skull'), {
                     position: {x: px, y: -1, z: pz},
                     visible: true,
                     targetY: h
@@ -1261,12 +1138,20 @@
             }
          
             modifyFloorShader(){
+               
+                // the floor is currently a Reflector which reacts as a mirror
+                // in order to make it a bit more interesting (adding blur, displacement and shadows)
+                // we will supercharge its shaders with custom code.
+               
+                // get the renderTarget and texture Matrix from the unaltered reflector
                 let renderTarget = this.floor.getRenderTarget();
                 const textureMatrix = this.floor.material.uniforms.textureMatrix;
                
+                // get the custom shaders
                 const fragmentShader = document.getElementById('reflectorFragmentShader').textContent;
                 const vertexShader = document.getElementById('reflectorVertexShader').textContent;
                
+                // merge the uniforms of the reflector with additional shadow and light uniforms
                 const uniforms = THREE.UniformsUtils.merge([
                     THREE.UniformsLib['common'],
                     THREE.UniformsLib['shadowmap'],
@@ -1277,6 +1162,7 @@
                 }
                 ])
          
+                // apply to the reflector
                 this.floor.material.lights = true;
                 this.floor.material.uniforms = uniforms;
                 this.floor.material.uniforms.tDiffuse.value = renderTarget.texture;
